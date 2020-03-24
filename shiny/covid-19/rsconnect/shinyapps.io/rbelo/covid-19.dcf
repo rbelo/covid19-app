@@ -5,6 +5,6 @@ account: rbelo
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1949427
-bundleId: 2911591
+bundleId: 2917184
 url: https://rbelo.shinyapps.io/covid-19/
-when: 1584949293.35237
+when: 1585040260.23815

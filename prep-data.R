@@ -22,8 +22,8 @@ prep.timeseries.data <- function(file) {
 
 setwd("~/project/covid19-app")
 
-dt.confirmed <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
-dt.deaths    <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+dt.confirmed <- prep.timeseries.data("./csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+dt.deaths    <- prep.timeseries.data("./csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
 
 dt.covid <- rbind(dt.confirmed[, list(country, date, event_type = "confirmed", cases)],
                   dt.deaths[,    list(country, date, event_type = "deaths", cases)])
