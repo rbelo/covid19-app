@@ -139,9 +139,6 @@ observeEvent(input$tabs, {
   } else if (input$tabs == "Deaths"){
      my.val <- 10
      selected.tab <<- "deaths"
-  } else if (input$tabs == "Recovered"){
-     my.val <- 10
-     selected.tab <<- "recovered"
   }
   updateNumericInput(session, "start.from.n.cases", value = my.val)
 })

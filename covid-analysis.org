@@ -88,12 +88,6 @@ ui <- fluidPage(
   # Sidebar 
   sidebarLayout(
     sidebarPanel(
-#shinyWidgets::sliderTextInput("pvalue2","PValue:",
-#                            choices=c(0, 0.0001, 0.001, 0.01),
-#                            selected=c(0, 0.001), grid = T),
-#   numericInput("min.n.cases",
-#                label = "Consider only countries that have reached at least the following confirmed cases:",
-#                value = 100),
       numericInput("start.from.n.cases",
                 label = "Start tracking a country when it reaches at least the following cases:",
                 value = c(100)),
@@ -107,7 +101,7 @@ ui <- fluidPage(
                 min = ymd(dt.covid[, max(date)]), max = ymd(dt.covid[, max(date)]) + ddays(14),
                 timeFormat = "%d %b"),
       sliderInput("prediction.period.past",
-                label = "Prediction based on growth of the lastest days:",
+                label = "Prediction based on growth of the last days:",
                 value = c(5),
                 min = 2, max = 14),
       radioButtons("scale.type", "Scale Type:",
@@ -291,9 +285,6 @@ observeEvent(input$tabs, {
   } else if (input$tabs == "Deaths"){
      my.val <- 10
      selected.tab <<- "deaths"
-  } else if (input$tabs == "Recovered"){
-     my.val <- 10
-     selected.tab <<- "recovered"
   }
   updateNumericInput(session, "start.from.n.cases", value = my.val)
 })
