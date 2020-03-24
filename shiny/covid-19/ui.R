@@ -46,8 +46,7 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(id = "tabs",
         tabPanel("Confirmed Cases", id = "confirmed", plotlyOutput("ft.plot.confirmed", height="500px")), 
-        tabPanel("Deaths", id = "deaths", plotlyOutput("ft.plot.deaths", height="500px")),
-        tabPanel("Recovered", id = "recovered", plotlyOutput("ft.plot.recovered", height="500px"))
+        tabPanel("Deaths", id = "deaths", plotlyOutput("ft.plot.deaths", height="500px"))
           ),
       "Inspired by this", a("plot", href="https://www.ft.com/content/a26fbf7e-48f8-11ea-aeb3-955839e06441"), 
       "by", a("@jburnmurdoch", href="https://twitter.com/jburnmurdoch"), br(),

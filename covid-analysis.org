@@ -18,18 +18,11 @@
 
 
 
-* SETUP
-
-#+BEGIN_SRC R
-setwd("~/project/COVID-19/")
-#+END_SRC
-
-
 * Shiny App
 
 ** Setup
 
-#+BEGIN_SRC R
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/prep-data.R
 library(data.table)
 library(lubridate)
 
@@ -54,13 +47,11 @@ prep.timeseries.data <- function(file) {
 
 setwd("~/project/covid19-app")
 
-dt.confirmed <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv")
-dt.deaths    <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv")
-dt.recovered <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
+dt.confirmed <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+dt.deaths    <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
 
 dt.covid <- rbind(dt.confirmed[, list(country, date, event_type = "confirmed", cases)],
-                  dt.deaths[,    list(country, date, event_type = "deaths", cases)],
-                  dt.recovered[, list(country, date, event_type = "recovered", cases)])
+                  dt.deaths[,    list(country, date, event_type = "deaths", cases)])
 
 # Manual adjustments
 dt.covid[country == "Portugal" & date == ymd("2020-03-18") & event_type == "confirmed", cases := 642]
@@ -139,8 +130,7 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(id = "tabs",
         tabPanel("Confirmed Cases", id = "confirmed", plotlyOutput("ft.plot.confirmed", height="500px")), 
-        tabPanel("Deaths", id = "deaths", plotlyOutput("ft.plot.deaths", height="500px")),
-        tabPanel("Recovered", id = "recovered", plotlyOutput("ft.plot.recovered", height="500px"))
+        tabPanel("Deaths", id = "deaths", plotlyOutput("ft.plot.deaths", height="500px"))
           ),
       "Inspired by this", a("plot", href="https://www.ft.com/content/a26fbf7e-48f8-11ea-aeb3-955839e06441"), 
       "by", a("@jburnmurdoch", href="https://twitter.com/jburnmurdoch"), br(),
@@ -367,7 +357,7 @@ server
 
 ** Launch
 
-#+BEGIN_SRC R
+#+BEGIN_SRC R :results none :tangle 
 shinyApp(ui = ui, server = server)
 #+END_SRC
 
