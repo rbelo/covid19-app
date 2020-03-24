@@ -1,0 +1,414 @@
+### -*- mode: org; eval: (auto-fill-mode 1); eval: (org-beamer-mode 1); eval: (flyspell-mode 1); org-todo-keyword-faces: (("FIGURE" . "orange") ("TABLE" . "orange")) -*-
+#+LATEX_HEADER: \textheight 230mm \textwidth 165mm \topmargin -15mm
+#+LATEX_HEADER: \parindent 0mm
+#+LATEX_HEADER: \evensidemargin 0mm
+#+LATEX_HEADER: \oddsidemargin 0mm
+#+LATEX_HEADER: \parskip 0mm
+#+OPTIONS: toc:nil num:3
+#+SEQ_TODO:   TODO(t) INPROGRESS(i) ALWAYS | DONE LATER PAPER(p) APPENDIX(a) 
+
+
+### Babel settings
+#+PROPERTY: header-args:R :session *R:COVID-19*
+# #+PROPERTY: header-args:R :session *surfsara*
+# #+PROPERTY: header-args:R :session *imac*
+# #+PROPERTY: header-args:R :session *ilab2*
+#+PROPERTY: header-args :cache no :results output :exports results :tangle yes :eval never-export
+
+
+
+
+* SETUP
+
+#+BEGIN_SRC R
+setwd("~/project/COVID-19/")
+#+END_SRC
+
+
+* Shiny App
+
+** Setup
+
+#+BEGIN_SRC R
+library(data.table)
+library(lubridate)
+
+prep.timeseries.data <- function(file) {
+  dt.data <- fread(file)
+  dt.data[, country_province := ifelse(`Province/State` == "", 
+                                     `Country/Region`,
+                                     paste0(`Country/Region`, "-", `Province/State`))]
+  setnames(dt.data, 
+           names(dt.data)[1:4], 
+           c("province", "country", "lat", "lon")) 
+  dt.data <- 
+       melt(dt.data, 
+            id.vars = c("country_province", "province", "country", "lat", "lon"),
+            value.name = "cases", 
+            variable.name = "date")
+  dt.data[, date := mdy(date)]
+  dt.data <- dt.data[, list(cases = sum(cases)), by = list(country, date)]
+  dt.data <- dt.data[order(country, date)]
+  dt.data
+}
+
+setwd("~/project/covid19-app")
+
+dt.confirmed <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv")
+dt.deaths    <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv")
+dt.recovered <- prep.timeseries.data("~/project/covid19-app/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv")
+
+dt.covid <- rbind(dt.confirmed[, list(country, date, event_type = "confirmed", cases)],
+                  dt.deaths[,    list(country, date, event_type = "deaths", cases)],
+                  dt.recovered[, list(country, date, event_type = "recovered", cases)])
+
+# Manual adjustments
+dt.covid[country == "Portugal" & date == ymd("2020-03-18") & event_type == "confirmed", cases := 642]
+dt.covid[country == "Portugal" & date == ymd("2020-03-18") & event_type == "deaths",    cases := 2]
+
+save(dt.covid,  file="./shiny/covid-19/covid-data.RData")
+#+END_SRC
+
+** Global 
+
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/global.R
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(shiny)
+library(shinyWidgets)
+library(plotly)
+
+load("covid-data.RData")
+
+countries.to.remove.always <- c("Cruise Ship")
+countries.to.include.default <- sort(c("Portugal", "Israel", "Italy", "Spain", "France", "Germany", "US", "United Kingdom", "Netherlands", "Denmark"))
+dt.covid <- dt.covid[!(country %in% countries.to.remove.always)]
+#+END_SRC
+
+
+** UI
+
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/ui.R
+
+ui <- fluidPage(
+  # Application title
+  titlePanel(paste0("COVID-19 (Latest Data: ", format(dt.covid[, max(date)], "%B %d, %Y"), ")")),
+  # Sidebar 
+  sidebarLayout(
+    sidebarPanel(
+#shinyWidgets::sliderTextInput("pvalue2","PValue:",
+#                            choices=c(0, 0.0001, 0.001, 0.01),
+#                            selected=c(0, 0.001), grid = T),
+#   numericInput("min.n.cases",
+#                label = "Consider only countries that have reached at least the following confirmed cases:",
+#                value = 100),
+      numericInput("start.from.n.cases",
+                label = "Start tracking a country when it reaches at least the following cases:",
+                value = c(100)),
+      sliderInput("max.obs.period",
+                label = "Track a country for a maximum of days:",
+                value = c(35),
+                min = 7, max = 60),
+      sliderInput("prediction.period.future",
+                label = "Predict the next days:",
+                value = ymd(dt.covid[, max(date)]),
+                min = ymd(dt.covid[, max(date)]), max = ymd(dt.covid[, max(date)]) + ddays(14),
+                timeFormat = "%d %b"),
+      sliderInput("prediction.period.past",
+                label = "Prediction based on growth of the lastest days:",
+                value = c(5),
+                min = 2, max = 14),
+      radioButtons("scale.type", "Scale Type:",
+               c("Log Scale" = "Log",
+                 "Linear Scale" = "Linear"),
+                 inline = TRUE),
+      radioButtons("growth.type", "Growth Type:",
+               c("Exponential" = "Exp",
+                 "Linear" = "Linear"),
+                 inline = TRUE),
+   actionButton("select.all", "All Countries"),
+   actionButton("select.none", "None"),
+   actionButton("select.default", "Default"),
+   selectInput("countries.to.include", "Include Countries:", 
+               choices = dt.covid[, unique(country)], 
+               multiple = TRUE,
+               selected = countries.to.include.default
+    )),
+
+    mainPanel(
+      tabsetPanel(id = "tabs",
+        tabPanel("Confirmed Cases", id = "confirmed", plotlyOutput("ft.plot.confirmed", height="500px")), 
+        tabPanel("Deaths", id = "deaths", plotlyOutput("ft.plot.deaths", height="500px")),
+        tabPanel("Recovered", id = "recovered", plotlyOutput("ft.plot.recovered", height="500px"))
+          ),
+      "Inspired by this", a("plot", href="https://www.ft.com/content/a26fbf7e-48f8-11ea-aeb3-955839e06441"), 
+      "by", a("@jburnmurdoch", href="https://twitter.com/jburnmurdoch"), br(),
+      "Data source:", a("Johns Hopkins CSSE", href="https://github.com/CSSEGISandData/COVID-19"), br(),
+      "Updated ±daily by", a("@rbelo", href="https://twitter.com/rbelo")
+    )
+  )
+)
+#+END_SRC
+
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/ui.R
+ui
+#+END_SRC
+
+#+RESULTS:
+
+** Server
+
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/server.R
+ft.plot <- function(event.type = c("confirmed", "deaths", "recovered"),
+                    start.from.n.cases = 100, 
+                    countries = c("Portugal", "Spain", "Italy"),
+                    min.date = ymd("2019-11-01"),
+                    max.date = today(),
+                    max.obs.period = 50,
+                    scale.type = c("Log", "Linear"),
+                    growth.type = c("Exp", "Linear"), 
+                    predict.based.on.last.n.days = 7,
+                    predict.n.days.ahead = 0) {
+
+  dt.covid.plot <- dt.covid[event_type == event.type[1] & 
+                            cases >= start.from.n.cases &
+                            country %in% countries &
+                            date >= min.date & date <= max.date]
+  dt.covid.plot[, ref_date := min(date), by=country]
+  dt.covid.plot[, days_from_ref_date := as.numeric(difftime(date, ref_date, units="days"))]
+  dt.covid.plot <- dt.covid.plot[days_from_ref_date <= max.obs.period]
+  dt.covid.plot[, max_days_from_ref_date := max(days_from_ref_date), by=country]
+  
+  if(nrow(dt.covid.plot) == 0) {
+   return(ggplot() + annotate(geom = "text", 
+                              y = 0, x = 0,
+                             label = "Please select at least one country.") + 
+   theme_minimal() + theme(legend.position="none") + 
+   scale_alpha_discrete(name = "Prediction", range = c(1, 0.5)) +
+   ylab(tools::toTitleCase(event.type[1])) + 
+   xlab(paste("Days since at least", start.from.n.cases, "cases")) 
+)
+   
+   }
+
+  if (growth.type[1] == "Exp") {
+    reg.growth.model <- lm(log(cases) ~ days_from_ref_date, data = dt.covid.plot)
+    dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
+                                    list(days_from_ref_date, 
+                                         ref_growth = exp(reg.growth.model$coefficients[1] +
+                                                          reg.growth.model$coefficients[2] * (0:(.N-1))))]
+    dt.covid.coeffs <- dt.covid.plot[days_from_ref_date > max_days_from_ref_date - predict.based.on.last.n.days, 
+                                     {model <- lm(log(cases) ~ days_from_ref_date)$coefficients; list(coeff_const = model[1], coeff_growth = model[2])}, by=list(country)]
+    dt.covid.coeffs <- merge(dt.covid.coeffs, 
+                             dt.covid.plot[, list(days_from_ref_date = days_from_ref_date[.N], 
+                                                  cases              = cases[.N]), by=country],
+                             by="country", all.x = TRUE)
+    dt.covid.predict <- dt.covid.coeffs[, list(date               = dt.covid.plot[, max(date)] + ddays(0:predict.n.days.ahead),
+                                               days_from_ref_date = days_from_ref_date + 0:predict.n.days.ahead, 
+                                               cases              = round(cases * exp(coeff_growth * (0:predict.n.days.ahead)))), 
+                                          by=country]
+ 
+  } else {
+    reg.growth.model <- lm(cases ~ days_from_ref_date, data = dt.covid.plot)
+    dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
+                                    list(days_from_ref_date, 
+                                         ref_growth = reg.growth.model$coefficients[1] +
+                                                      reg.growth.model$coefficients[2] * (0:(.N-1)))]
+    dt.covid.coeffs <- dt.covid.plot[days_from_ref_date > max_days_from_ref_date - predict.based.on.last.n.days, 
+                                     {model <- lm(cases ~ days_from_ref_date)$coefficients; list(coeff_const = model[1], coeff_growth = model[2])}, by=list(country)]
+    dt.covid.coeffs <- merge(dt.covid.coeffs, 
+                             dt.covid.plot[, list(days_from_ref_date = days_from_ref_date[.N], 
+                                                  cases              = cases[.N]), by=country],
+                             by="country", all.x = TRUE)
+    dt.covid.predict <- dt.covid.coeffs[, list(date               = dt.covid.plot[, max(date)] + ddays(0:predict.n.days.ahead),
+                                               days_from_ref_date = days_from_ref_date + 0:predict.n.days.ahead, 
+                                               cases              = round(cases + coeff_growth * (0:predict.n.days.ahead))), 
+                                          by=country]
+}
+
+  dt.covid.plot <- rbind(dt.covid.plot[, list(country, Date=date, event_type, cases, days_from_ref_date,  prediction = "No")], 
+                         dt.covid.predict[, list(country, Date=date, event_type = event.type, cases, days_from_ref_date, prediction = "Yes")])
+  dt.covid.plot.labels <- dt.covid.plot[, .SD[.N], by=list(country, prediction)]
+  dt.covid.plot.labels[, diff_cases := cases[prediction == "Yes"] - cases[prediction == "No"], by=country]
+  dt.covid.plot.labels[, diff_cases_desc := paste0(" (+", format(diff_cases, big.mark=",", trim=TRUE), ")"), by=country]
+  dt.covid.plot.labels[prediction == "No" | diff_cases == 0, diff_cases_desc := ""]
+  dt.covid.plot.labels[, Desc := paste0(country, ": ", format(cases, big.mark=",", trim=TRUE), diff_cases_desc)]
+#  dt.covid.plot.labels[, prediction := factor(prediction, levels=c("Yes", "No"))]
+
+# main plot
+g <- ggplot(dt.covid.plot) + 
+   geom_line(aes(days_from_ref_date, ref_growth),
+             data = dt.covid.ref.growth, linetype = "dashed", size=0.35) +
+   annotate(geom = "text", 
+            x = 0, 
+            y = dt.covid.ref.growth[.N, ref_growth],
+            hjust = 0,
+            label = ifelse(growth.type[1] == "Exp", 
+                           paste0("Avg. daily growth: ", round(reg.growth.model$coefficients[2] * 100, 0), "%"),
+                           paste0("Avg. new cases: ", round(reg.growth.model$coefficients[2], 0)))) +
+   geom_line(aes(days_from_ref_date, cases, color=country, label=Date, linetype = prediction, alpha=prediction), size=0.35) + 
+   geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction),
+               size=0.5,
+              data = dt.covid.plot) + 
+   geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction),
+               size=1.5,
+              data = dt.covid.plot[, list(Date=Date[.N], days_from_ref_date = days_from_ref_date[.N], cases = cases[.N]), 
+                                   by=list(country, prediction)]) + 
+   geom_text(aes(days_from_ref_date, cases, alpha=prediction, 
+                 label = Desc), 
+             data = dt.covid.plot.labels,
+             hjust = 0, nudge_x = .6, size=3, check_overlap = TRUE) + 
+   xlim(c(0, dt.covid.plot[, max(days_from_ref_date) * 1.3])) +
+   theme_minimal() + theme(legend.position="none") + 
+   scale_alpha_discrete(name = "Prediction", range = c(1, 0.5)) +
+   ylab(tools::toTitleCase(event.type[1])) + 
+   xlab(paste("Days since at least", start.from.n.cases, "cases")) 
+
+
+if (scale.type[1] == "Log") {
+   g <- g + scale_y_log10()
+}
+g %>% style(textposition="right")
+}
+
+server <- function(input, output, session) {
+
+selected.tab <- "confirmed"
+
+observeEvent(input$select.all, {
+ updateSelectInput(session, "countries.to.include",
+                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   selected = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)])
+})
+
+observeEvent(input$select.none, {
+ updateSelectInput(session, "countries.to.include",
+                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   selected = c(""))
+})
+
+observeEvent(input$select.default, {
+ updateSelectInput(session, "countries.to.include",
+                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   selected = countries.to.include.default)
+})
+
+observeEvent(input$tabs, {
+  if (input$tabs == "Confirmed Cases") { 
+     my.val <- 100
+     selected.tab <<- "confirmed"
+  } else if (input$tabs == "Deaths"){
+     my.val <- 10
+     selected.tab <<- "deaths"
+  } else if (input$tabs == "Recovered"){
+     my.val <- 10
+     selected.tab <<- "recovered"
+  }
+  updateNumericInput(session, "start.from.n.cases", value = my.val)
+})
+
+observeEvent(input$start.from.n.cases, {
+  updateSelectInput(session, "countries.to.include",
+                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   selected = input$countries.to.include)
+})
+
+# observe({
+#    x <- input$filter.type
+#    if (x == "filter.in") {
+#       selected.countries <- countries.to.include
+#    } else {
+#       selected.countries <- countries.to.remove
+#    }
+#    updateSelectInput(session, "countries.to.include",
+#                  label = "",
+#                  choices = dt.covid[cases >= input$start.from.n.cases, unique(country)],
+#                  selected = intersect(dt.covid[cases >= input$start.from.n.cases, unique(country)], 
+#                             selected.countries)
+#    )
+#  })
+
+  output$ft.plot.confirmed <- 
+        renderPlotly({ft.plot(event.type = "confirmed", 
+                                start.from.n.cases = input$start.from.n.cases, 
+                                countries = input$countries.to.include,
+                                max.obs.period = input$max.obs.period,
+                                scale.type = input$scale.type,
+                                growth.type = input$growth.type,
+                                predict.based.on.last.n.days = input$prediction.period.past,
+                                predict.n.days.ahead = as.numeric(input$prediction.period.future - ymd(dt.covid[, max(date)])))})
+
+  output$ft.plot.deaths <- 
+         renderPlotly({ft.plot(event.type = "deaths", 
+                                start.from.n.cases = input$start.from.n.cases, 
+                                countries = input$countries.to.include,
+                                max.obs.period = input$max.obs.period,
+                                scale.type = input$scale.type,
+                                growth.type = input$growth.type,
+                                predict.based.on.last.n.days = input$prediction.period.past,
+                                predict.n.days.ahead = as.numeric(input$prediction.period.future - ymd(dt.covid[, max(date)])))})
+
+  output$ft.plot.recovered <- 
+        renderPlotly({ft.plot(event.type = "recovered", 
+                                start.from.n.cases = input$start.from.n.cases, 
+                                countries = input$countries.to.include,
+                                max.obs.period = input$max.obs.period,
+                                scale.type = input$scale.type,
+                                growth.type = input$growth.type,
+                                predict.based.on.last.n.days = input$prediction.period.past,
+                                predict.n.days.ahead = as.numeric(input$prediction.period.future - ymd(dt.covid[, max(date)])))})
+}
+#+END_SRC
+
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/server.R
+server
+#+END_SRC
+
+** Launch
+
+#+BEGIN_SRC R
+shinyApp(ui = ui, server = server)
+#+END_SRC
+
+#+RESULTS:
+
+
+** Deploy
+
+#+BEGIN_SRC R :results none :tangle ./shiny/covid-19/deploy.R
+
+# Create an account on shiniapps.io to deploy your first app. This
+# procedure together will take approximately 10 minutes.
+
+# - Go to: https://www.shinyapps.io/admin/#/signup
+# 
+# - Create an account (name + password). You can use whatever email
+#   you like.
+# 
+# - Fill in your tokens (accountname + token + secret) in the code
+#   below
+# 
+# - Run the code until line 15 (the rest is for the workshop today)
+# 
+# - In Line 21, set appDir= an empty folder that you will use for
+#   today’s class. Use complete path (example: appDir =
+#   "C:/Users/david/Google
+#   Drive/R_learning/shiny/shiny.rodrigo/covid-19” )
+
+
+
+#install.packages("shiny")
+#install.packages("rsconnect") # used to deploy
+library(shiny)
+library(data.table)
+library(rsconnect) # open libraries that you will use today
+
+setAccountInfo(name='rbelo',
+			  token='',
+			  secret='')
+deployApp('shiny/covid-19', account='rbelo')
+#+END_SRC
+
+
+
