@@ -8,14 +8,6 @@
 # 
 # - Fill in your tokens (accountname + token + secret) in the code
 #   below
-# 
-# - Run the code until line 15 (the rest is for the workshop today)
-# 
-# - In Line 21, set appDir= an empty folder that you will use for
-#   today’s class. Use complete path (example: appDir =
-#   "C:/Users/david/Google
-#   Drive/R_learning/shiny/shiny.rodrigo/covid-19” )
-
 
 
 #install.packages("shiny")
