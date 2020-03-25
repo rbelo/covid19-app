@@ -33,7 +33,7 @@ ui <- fluidPage(
                    value = c(100)),
       sliderInput("max.obs.period",
                   label = "Track a country for a maximum of days:",
-                  value = c(35),
+                  value = c(40),
                   min = 7, max = 60)
    ),
 

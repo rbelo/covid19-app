@@ -30,12 +30,13 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
    
    }
 
+
   if (growth.type[1] == "Exp") {
     reg.growth.model <- lm(log(cases) ~ days_from_ref_date, data = dt.covid.plot)
-    dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
-                                    list(days_from_ref_date, 
-                                         ref_growth = exp(reg.growth.model$coefficients[1] +
-                                                          reg.growth.model$coefficients[2] * (0:(.N-1))))]
+ #   dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
+ #                                   list(days_from_ref_date, 
+ #                                        ref_growth = exp(reg.growth.model$coefficients[1] +
+ #                                                         reg.growth.model$coefficients[2] * (0:(.N-1))))]
     dt.covid.coeffs <- dt.covid.plot[days_from_ref_date > max_days_from_ref_date - predict.based.on.last.n.days, 
                                      {model <- lm(log(cases) ~ days_from_ref_date)$coefficients; list(coeff_const = model[1], coeff_growth = model[2])}, by=list(country)]
     dt.covid.coeffs <- merge(dt.covid.coeffs, 
@@ -49,10 +50,10 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
  
   } else {
     reg.growth.model <- lm(cases ~ days_from_ref_date, data = dt.covid.plot)
-    dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
-                                    list(days_from_ref_date, 
-                                         ref_growth = reg.growth.model$coefficients[1] +
-                                                      reg.growth.model$coefficients[2] * (0:(.N-1)))]
+#    dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
+#                                    list(days_from_ref_date, 
+#                                         ref_growth = reg.growth.model$coefficients[1] +
+#                                                      reg.growth.model$coefficients[2] * (0:(.N-1)))]
     dt.covid.coeffs <- dt.covid.plot[days_from_ref_date > max_days_from_ref_date - predict.based.on.last.n.days, 
                                      {model <- lm(cases ~ days_from_ref_date)$coefficients; list(coeff_const = model[1], coeff_growth = model[2])}, by=list(country)]
     dt.covid.coeffs <- merge(dt.covid.coeffs, 
@@ -69,6 +70,18 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
   dt.covid.plot <- rbind(dt.covid.plot[, list(country, Date=date, event_type, cases, days_from_ref_date,  prediction = "No")], 
                          dt.covid.predict[, list(country, Date=date, event_type = event.type, cases, days_from_ref_date, prediction = "Yes")])
 
+  # calculate growth refs 
+  dt.covid.growth.refs <- 
+                CJ(days_from_ref_date = 0:(dt.covid.plot[, max(days_from_ref_date)] + predict.n.days.ahead), 
+                   double_every_x_days = c(1,2,3,7))
+  dt.covid.growth.refs[, ref_growth := log(2^(1/double_every_x_days))]
+  dt.covid.growth.refs[, ref_cases := exp(log(start.from.n.cases) + days_from_ref_date * ref_growth)]
+  dt.covid.growth.refs[, Growth := paste0(round(ref_growth * 100), "%")]
+  dt.covid.growth.refs[, Desc := paste0("Doubles every ", double_every_x_days, " days")]
+  dt.covid.growth.refs[double_every_x_days == 1, Desc := paste0("Doubles every day")]
+  dt.covid.growth.refs <- dt.covid.growth.refs[ref_cases <= dt.covid.plot[, max(cases, na.rm=TRUE)] * 2 & 
+                                               days_from_ref_date <= dt.covid.plot[, max(days_from_ref_date, na.rm=TRUE)]]
+
   # prepare labels
   dt.covid.plot.labels <- dt.covid.plot[, .SD[.N], by=list(country, prediction)]
   dt.covid.plot.labels[, diff_cases := cases[prediction == "Yes"] - cases[prediction == "No"], by=country]
@@ -78,12 +91,20 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
 
   # main plot
   g <- ggplot(dt.covid.plot) + 
-     geom_line(aes(days_from_ref_date, ref_growth),
-               data = dt.covid.ref.growth, linetype = "dashed", size=0.35) +
+#     geom_line(aes(days_from_ref_date, ref_growth),
+#               data = dt.covid.ref.growth, linetype = "dashed", size=0.35) +
+     geom_line(aes(days_from_ref_date, ref_cases, series=Growth),
+               data = dt.covid.growth.refs, color="gray", linetype = "dotted", size=0.35) +
+     geom_text(aes(days_from_ref_date, ref_cases, 
+                   label = Desc), 
+               color="gray",
+               data = dt.covid.growth.refs[, .SD[.N], by=ref_growth],
+               hjust = 0, nudge_x = .6, size=3, check_overlap = TRUE) + 
      annotate(geom = "text", 
               x = 0, 
-              y = dt.covid.ref.growth[.N, ref_growth],
+              y = dt.covid.growth.refs[, max(ref_cases)],
               hjust = 0,
+              size = 3.5,
               label = ifelse(growth.type[1] == "Exp", 
                              paste0("Avg. daily growth: ", round(reg.growth.model$coefficients[2] * 100, 0), "%"),
                              paste0("Avg. new cases: ", round(reg.growth.model$coefficients[2], 0)))) +
