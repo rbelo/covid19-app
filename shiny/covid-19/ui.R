@@ -29,12 +29,15 @@ ui <- fluidPage(
                      "Linear" = "Linear"),
                    inline = TRUE), hr(),
       numericInput("start.from.n.cases",
-                   label = "Start tracking a country when it reaches at least the following cases:",
+                   label = "Start tracking from the following confirmed cases:",
                    value = c(100)),
+      numericInput("start.from.n.deaths",
+                   label = "Start tracking from the following deaths:",
+                   value = c(10)),
       sliderInput("max.obs.period",
                   label = "Track a country for a maximum of days:",
-                  value = c(40),
-                  min = 7, max = 60)
+                  value = c(60),
+                  min = 7, max = 90)
    ),
 
     mainPanel(
@@ -45,7 +48,8 @@ ui <- fluidPage(
       "Inspired by this", a("plot", href="https://www.ft.com/content/a26fbf7e-48f8-11ea-aeb3-955839e06441"), 
       "by", a("@jburnmurdoch", href="https://twitter.com/jburnmurdoch"), br(),
       "Data source:", a("Johns Hopkins CSSE", href="https://github.com/CSSEGISandData/COVID-19"), br(),
-      "Updated ±daily by", a("@rbelo", href="https://twitter.com/rbelo")
+      "Updated ±daily by", a("@rbelo", href="https://twitter.com/rbelo"), br(),
+      "Source code", a("here", href="https://github.com/rbelo/covid19-app")
     )
   )
 )

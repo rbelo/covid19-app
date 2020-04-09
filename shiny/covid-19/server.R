@@ -136,39 +136,48 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
 server <- function(input, output, session) {
 
 selected.tab <- "confirmed"
+start.from.n <- 100
+
+observeEvent(input$tabs, {
+  if (input$tabs == "Confirmed Cases") { 
+     start.from.n <<- input$start.from.n.cases
+     selected.tab <<- "confirmed"
+  } else if (input$tabs == "Deaths"){
+     start.from.n <<- input$start.from.n.deaths
+     selected.tab <<- "deaths"
+  }
+#  updateNumericInput(session, "start.from.n.cases", value = my.val)
+})
 
 observeEvent(input$select.all, {
  updateSelectInput(session, "countries.to.include",
-                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
-                   selected = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)])
+                   choices = dt.covid[event_type == selected.tab & cases >= start.from.n, unique(country)],
+                   selected = dt.covid[event_type == selected.tab & cases >= start.from.n, unique(country)])
 })
 
 observeEvent(input$select.none, {
  updateSelectInput(session, "countries.to.include",
-                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   choices = dt.covid[event_type == selected.tab & cases >= start.from.n, unique(country)],
                    selected = c(""))
 })
 
 observeEvent(input$select.default, {
  updateSelectInput(session, "countries.to.include",
-                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   choices = dt.covid[event_type == selected.tab & cases >= start.from.n, unique(country)],
                    selected = countries.to.include.default)
 })
 
-observeEvent(input$tabs, {
-  if (input$tabs == "Confirmed Cases") { 
-     my.val <- 100
-     selected.tab <<- "confirmed"
-  } else if (input$tabs == "Deaths"){
-     my.val <- 10
-     selected.tab <<- "deaths"
-  }
-  updateNumericInput(session, "start.from.n.cases", value = my.val)
-})
 
 observeEvent(input$start.from.n.cases, {
+  start.from.n <<- input$start.from.n.cases
   updateSelectInput(session, "countries.to.include",
-                   choices = dt.covid[event_type == selected.tab & cases >= input$start.from.n.cases, unique(country)],
+                   choices = dt.covid[event_type == selected.tab & cases >= start.from.n, unique(country)],
+                   selected = input$countries.to.include)
+})
+observeEvent(input$start.from.n.deaths, {
+  start.from.n <<- input$start.from.n.deaths
+  updateSelectInput(session, "countries.to.include",
+                   choices = dt.covid[event_type == selected.tab & cases >= start.from.n, unique(country)],
                    selected = input$countries.to.include)
 })
 
@@ -184,7 +193,7 @@ observeEvent(input$start.from.n.cases, {
 
   output$ft.plot.deaths <- 
          renderPlotly({ft.plot(event.type = "deaths", 
-                                start.from.n.cases = input$start.from.n.cases, 
+                                start.from.n.cases = input$start.from.n.deaths, 
                                 countries = input$countries.to.include,
                                 max.obs.period = input$max.obs.period,
                                 scale.type = input$scale.type,
