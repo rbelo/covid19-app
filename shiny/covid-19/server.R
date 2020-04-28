@@ -4,12 +4,17 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
                     min.date = ymd("2019-11-01"),
                     max.date = today(),
                     max.obs.period = 50,
+                    cases.count = c("New", "Cumulative"),
                     scale.type = c("Log", "Linear"),
                     growth.type = c("Exp", "Linear"), 
                     predict.based.on.last.n.days = 7,
                     predict.n.days.ahead = 0) {
 
-  dt.covid.plot <- dt.covid[event_type == event.type[1] & 
+  dt.covid.plot <- copy(dt.covid)
+  if (cases.count[1] == "New") {
+      dt.covid.plot[, cases := round(frollmean(cases - shift(cases, fill=0), 7)), by = list(country)]
+   }
+  dt.covid.plot <- dt.covid.plot[event_type == event.type[1] & 
                             cases >= start.from.n.cases &
                             country %in% countries &
                             date >= min.date & date <= max.date]
@@ -24,12 +29,11 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
                              label = "Please select at least one country.") + 
    theme_minimal() + theme(legend.position="none") + 
    scale_alpha_discrete(name = "Prediction", range = c(1, 0.5)) +
-   ylab(tools::toTitleCase(event.type[1])) + 
+   ylab(paste(cases.count, tools::toTitleCase(event.type[1]))) + 
    xlab(paste("Days since at least", start.from.n.cases, "cases")) 
 )
    
    }
-
 
   if (growth.type[1] == "Exp") {
     reg.growth.model <- lm(log(cases) ~ days_from_ref_date, data = dt.covid.plot)
@@ -69,11 +73,12 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
   # add predictions 
   dt.covid.plot <- rbind(dt.covid.plot[, list(country, Date=date, event_type, cases, days_from_ref_date,  prediction = "No")], 
                          dt.covid.predict[, list(country, Date=date, event_type = event.type, cases, days_from_ref_date, prediction = "Yes")])
+  dt.covid.plot[, Growth := paste0((cases - shift(cases)), " (", round((cases - shift(cases))/shift(cases) * 100, 1), "%)"), by=list(country)]
 
   # calculate growth refs 
   dt.covid.growth.refs <- 
                 CJ(days_from_ref_date = 0:(dt.covid.plot[, max(days_from_ref_date)] + predict.n.days.ahead), 
-                   double_every_x_days = c(1,2,3,7))
+                   double_every_x_days = c(3,7,14))
   dt.covid.growth.refs[, ref_growth := log(2^(1/double_every_x_days))]
   dt.covid.growth.refs[, ref_cases := exp(log(start.from.n.cases) + days_from_ref_date * ref_growth)]
   dt.covid.growth.refs[, Growth := paste0(round(ref_growth * 100), "%")]
@@ -85,7 +90,10 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
   # prepare labels
   dt.covid.plot.labels <- dt.covid.plot[, .SD[.N], by=list(country, prediction)]
   dt.covid.plot.labels[, diff_cases := cases[prediction == "Yes"] - cases[prediction == "No"], by=country]
-  dt.covid.plot.labels[, diff_cases_desc := paste0(" (+", format(diff_cases, big.mark=",", trim=TRUE), ")"), by=country]
+  dt.covid.plot.labels[, diff_cases_desc := paste0(" (", 
+                                                   ifelse(diff_cases > 0, "+",""), 
+                                                   format(diff_cases, big.mark=",", trim=TRUE), 
+                                                   ")"), by=country]
   dt.covid.plot.labels[prediction == "No" | diff_cases == 0, diff_cases_desc := ""]
   dt.covid.plot.labels[, Desc := paste0(country, ": ", format(cases, big.mark=",", trim=TRUE), diff_cases_desc)]
 
@@ -109,13 +117,12 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
                              paste0("Avg. daily growth: ", round(reg.growth.model$coefficients[2] * 100, 0), "%"),
                              paste0("Avg. new cases: ", round(reg.growth.model$coefficients[2], 0)))) +
      geom_line(aes(days_from_ref_date, cases, color=country, label=Date, linetype = prediction, alpha=prediction), size=0.35) + 
-     geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction),
+     geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction, label2=Growth),
                  size=0.5,
                 data = dt.covid.plot) + 
-     geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction),
+     geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction, label2=Growth),
                  size=1.5,
-                data = dt.covid.plot[, list(Date=Date[.N], days_from_ref_date = days_from_ref_date[.N], cases = cases[.N]), 
-                                     by=list(country, prediction)]) + 
+                data = dt.covid.plot[, .SD[.N], by=list(country, prediction)]) + 
      geom_text(aes(days_from_ref_date, cases, alpha=prediction, 
                    label = Desc), 
                data = dt.covid.plot.labels,
@@ -123,7 +130,7 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
      xlim(c(0, dt.covid.plot[, max(days_from_ref_date) * 1.3])) +
      theme_minimal() + theme(legend.position="none") + 
      scale_alpha_discrete(name = "Prediction", range = c(1, 0.5)) +
-     ylab(tools::toTitleCase(event.type[1])) + 
+     ylab(paste(cases.count, tools::toTitleCase(event.type[1]))) + 
      xlab(paste("Days since at least", start.from.n.cases, "cases")) 
   
   
@@ -186,6 +193,7 @@ observeEvent(input$start.from.n.deaths, {
                                 start.from.n.cases = input$start.from.n.cases, 
                                 countries = input$countries.to.include,
                                 max.obs.period = input$max.obs.period,
+                                cases.count = input$cases.count,
                                 scale.type = input$scale.type,
                                 growth.type = input$growth.type,
                                 predict.based.on.last.n.days = input$prediction.period.past,
@@ -196,6 +204,7 @@ observeEvent(input$start.from.n.deaths, {
                                 start.from.n.cases = input$start.from.n.deaths, 
                                 countries = input$countries.to.include,
                                 max.obs.period = input$max.obs.period,
+                                cases.count = input$cases.count,
                                 scale.type = input$scale.type,
                                 growth.type = input$growth.type,
                                 predict.based.on.last.n.days = input$prediction.period.past,

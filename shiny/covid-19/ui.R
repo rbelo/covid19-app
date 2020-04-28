@@ -14,12 +14,16 @@ ui <- fluidPage(
       sliderInput("prediction.period.future",
                   label = "Predict the next days:",
                   value = ymd(dt.covid[, max(date)]),
-                  min = ymd(dt.covid[, max(date)]), max = ymd(dt.covid[, max(date)]) + ddays(14),
+                  min = ymd(dt.covid[, max(date)]), max = ymd(dt.covid[, max(date)]) + ddays(60),
                   timeFormat = "%d %b"),
       sliderInput("prediction.period.past",
                   label = "Prediction based on growth of the last days:",
                   value = c(5),
                   min = 2, max = 14), hr(),
+      radioButtons("cases.count", "Cases:",
+                   c("New" = "New",
+                     "Cumulative" = "Cumulative"),
+                   inline = TRUE),
       radioButtons("scale.type", "Scale Type:",
                    c("Log Scale" = "Log",
                      "Linear Scale" = "Linear"),
@@ -36,8 +40,8 @@ ui <- fluidPage(
                    value = c(10)),
       sliderInput("max.obs.period",
                   label = "Track a country for a maximum of days:",
-                  value = c(60),
-                  min = 7, max = 90)
+                  value = c(90),
+                  min = 7, max = 180)
    ),
 
     mainPanel(
