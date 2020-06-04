@@ -11,11 +11,16 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
                     predict.n.days.ahead = 0) {
 
   dt.covid.plot <- copy(dt.covid)
+  dt.covid.plot[, csum_cases := cases]
+  dt.covid.plot[, diff_cases := csum_cases - shift(csum_cases, fill=0), by = list(country, event_type)]
   if (cases.count[1] == "New") {
-      dt.covid.plot[, cases := round(frollmean(cases - shift(cases, fill=0), 7)), by = list(country)]
+      dt.covid.plot[, cases := round(frollmean(diff_cases, 7)), by = list(country, event_type)]
+   } else {
+      dt.covid.plot[, cases := csum_cases]
    }
+  dt.covid.plot[!is.na(cases), cmax_cases := cummax(cases) , by=list(country, event_type)]
   dt.covid.plot <- dt.covid.plot[event_type == event.type[1] & 
-                            cases >= start.from.n.cases &
+                            cmax_cases >= start.from.n.cases &
                             country %in% countries &
                             date >= min.date & date <= max.date]
   dt.covid.plot[, ref_date := min(date), by=country]
@@ -36,12 +41,12 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
    }
 
   if (growth.type[1] == "Exp") {
-    reg.growth.model <- lm(log(cases) ~ days_from_ref_date, data = dt.covid.plot)
+    reg.growth.model <- lm(log(cases) ~ days_from_ref_date, data = dt.covid.plot[cases > 0])
  #   dt.covid.ref.growth <- dt.covid.plot[order(days_from_ref_date)][!duplicated(days_from_ref_date)][, 
  #                                   list(days_from_ref_date, 
  #                                        ref_growth = exp(reg.growth.model$coefficients[1] +
  #                                                         reg.growth.model$coefficients[2] * (0:(.N-1))))]
-    dt.covid.coeffs <- dt.covid.plot[days_from_ref_date > max_days_from_ref_date - predict.based.on.last.n.days, 
+    dt.covid.coeffs <- dt.covid.plot[cases > 0 & days_from_ref_date > max_days_from_ref_date - predict.based.on.last.n.days, 
                                      {model <- lm(log(cases) ~ days_from_ref_date)$coefficients; list(coeff_const = model[1], coeff_growth = model[2])}, by=list(country)]
     dt.covid.coeffs <- merge(dt.covid.coeffs, 
                              dt.covid.plot[, list(days_from_ref_date = days_from_ref_date[.N], 
@@ -89,13 +94,13 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
 
   # prepare labels
   dt.covid.plot.labels <- dt.covid.plot[, .SD[.N], by=list(country, prediction)]
-  dt.covid.plot.labels[, diff_cases := cases[prediction == "Yes"] - cases[prediction == "No"], by=country]
-  dt.covid.plot.labels[, diff_cases_desc := paste0(" (", 
-                                                   ifelse(diff_cases > 0, "+",""), 
-                                                   format(diff_cases, big.mark=",", trim=TRUE), 
+  dt.covid.plot.labels[, diff_cases_pred := cases[prediction == "Yes"] - cases[prediction == "No"], by=country]
+  dt.covid.plot.labels[, diff_cases_pred_desc := paste0(" (", 
+                                                   ifelse(diff_cases_pred > 0, "+",""), 
+                                                   format(diff_cases_pred, big.mark=",", trim=TRUE), 
                                                    ")"), by=country]
-  dt.covid.plot.labels[prediction == "No" | diff_cases == 0, diff_cases_desc := ""]
-  dt.covid.plot.labels[, Desc := paste0(country, ": ", format(cases, big.mark=",", trim=TRUE), diff_cases_desc)]
+  dt.covid.plot.labels[prediction == "No" | diff_cases_pred == 0, diff_cases_pred_desc := ""]
+  dt.covid.plot.labels[, Desc := paste0(country, ": ", format(cases, big.mark=",", trim=TRUE), diff_cases_pred_desc)]
 
   # main plot
   g <- ggplot(dt.covid.plot) + 
@@ -108,14 +113,14 @@ ft.plot <- function(event.type = c("confirmed", "deaths"),
                color="gray",
                data = dt.covid.growth.refs[, .SD[.N], by=ref_growth],
                hjust = 0, nudge_x = .6, size=3, check_overlap = TRUE) + 
-     annotate(geom = "text", 
-              x = 0, 
-              y = dt.covid.growth.refs[, max(ref_cases)],
-              hjust = 0,
-              size = 3.5,
-              label = ifelse(growth.type[1] == "Exp", 
-                             paste0("Avg. daily growth: ", round(reg.growth.model$coefficients[2] * 100, 0), "%"),
-                             paste0("Avg. new cases: ", round(reg.growth.model$coefficients[2], 0)))) +
+#     annotate(geom = "text", 
+#              x = 0, 
+#              y = dt.covid.growth.refs[, max(ref_cases)],
+#              hjust = 0,
+#              size = 3.5,
+#              label = ifelse(growth.type[1] == "Exp", 
+#                             paste0("Avg. daily growth: ", round(reg.growth.model$coefficients[2] * 100, 0), "%"),
+#                             paste0("Avg. new cases: ", round(reg.growth.model$coefficients[2], 0)))) +
      geom_line(aes(days_from_ref_date, cases, color=country, label=Date, linetype = prediction, alpha=prediction), size=0.35) + 
      geom_point(aes(days_from_ref_date, cases, color=country, label=Date, alpha = prediction, label2=Growth),
                  size=0.5,

@@ -40,8 +40,8 @@ ui <- fluidPage(
                    value = c(10)),
       sliderInput("max.obs.period",
                   label = "Track a country for a maximum of days:",
-                  value = c(90),
-                  min = 7, max = 180)
+                  value = c(max(dt.covid[, .N, by = list(country, event_type)][, N])),
+                  min = 7, max = max(dt.covid[, .N, by = list(country, event_type)][, N]))
    ),
 
     mainPanel(
